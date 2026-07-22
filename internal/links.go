@@ -1,0 +1,240 @@
+package internal
+
+import (
+	"bytes"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// linkScanDirs are the directories walked for markdown links that may
+// reference a renamed or deleted note.
+var linkScanDirs = []string{
+	"permanent",
+	"stubs",
+	"reference",
+	"literature",
+	"index",
+	"writing",
+	"projects",
+	"inbox",
+}
+
+var smallWords = map[string]bool{
+	"a": true, "an": true, "the": true,
+	"and": true, "but": true, "or": true, "nor": true,
+	"as": true, "at": true, "by": true, "for": true, "in": true,
+	"of": true, "on": true, "per": true, "to": true, "up": true,
+	"via": true, "vs": true, "with": true, "from": true, "into": true,
+}
+
+// titleFromFilename derives a best-effort title from a kebab-case filename.
+// It's lossy for titles with punctuation kebab-case can't encode
+// (apostrophes, commas, etc), so it's only used as a fallback when a file
+// has no real H1 to read (see resolveTitle) or as the default guess for a
+// brand new filename that hasn't had its H1 written yet.
+func titleFromFilename(path string) string {
+	base := strings.TrimSuffix(filepath.Base(path), ".md")
+	words := strings.Split(base, "-")
+	for i, w := range words {
+		if w == "" {
+			continue
+		}
+		lower := strings.ToLower(w)
+		if i != 0 && i != len(words)-1 && smallWords[lower] {
+			words[i] = lower
+			continue
+		}
+		words[i] = strings.ToUpper(w[:1]) + strings.ToLower(w[1:])
+	}
+	return strings.Join(words, " ")
+}
+
+// filenameFromTitle derives a kebab-case filename from a note title: lower
+// case, every run of non [a-z0-9] characters collapsed to a single hyphen,
+// and no leading or trailing hyphen. It's the inverse of titleFromFilename,
+// used when creating a new note from a title rather than reading one back.
+func filenameFromTitle(title string) string {
+	var b strings.Builder
+	prevHyphen := true // treat start-of-string like a hyphen so leading runs are dropped
+	for _, r := range strings.ToLower(title) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			prevHyphen = false
+			continue
+		}
+		if !prevHyphen {
+			b.WriteByte('-')
+			prevHyphen = true
+		}
+	}
+	return strings.TrimSuffix(b.String(), "-")
+}
+
+// h1Title reads path and returns the text of its first H1 heading — the
+// first non-blank line, which must start with "# ". This is the source of
+// truth for a note's title; unlike titleFromFilename it can't mismatch
+// itself on punctuation a kebab-case filename can't encode.
+func h1Title(path string) (string, bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "# ") {
+			return strings.TrimSpace(trimmed[2:]), true
+		}
+		return "", false
+	}
+	return "", false
+}
+
+// resolveTitle returns a note's real title, read from its H1, falling back
+// to a filename-derived guess only if the file has no H1 at all.
+func resolveTitle(path string) string {
+	if title, ok := h1Title(path); ok {
+		return title
+	}
+	return titleFromFilename(path)
+}
+
+// rewriteH1 replaces path's first H1 heading (see h1Title) with newTitle,
+// touching nothing else in the file. Errors if there's no H1 to replace.
+func rewriteH1(path string, newTitle string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	lines := strings.Split(string(data), "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if !strings.HasPrefix(trimmed, "# ") {
+			break
+		}
+		lines[i] = "# " + newTitle
+		return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0644)
+	}
+	return fmt.Errorf("no H1 heading found in %s", path)
+}
+
+// rewriteMatchingLinks scans path for inline markdown links [text](href)
+// whose href resolves (relative to path's own directory) to targetAbs, and
+// replaces each match with replace(path, path's abs dir, text, href).
+// External links (href containing "://") are never matched.
+func rewriteMatchingLinks(path, targetAbs string, replace func(filePath, fileAbsDir, text, href string) string) (bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false, err
+	}
+
+	dir := filepath.Dir(path)
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return false, err
+	}
+	changed := false
+	var out []byte
+
+	i := 0
+	for i < len(data) {
+		open := bytes.IndexByte(data[i:], '[')
+		if open == -1 {
+			out = append(out, data[i:]...)
+			break
+		}
+		open += i
+		out = append(out, data[i:open]...)
+
+		closeText := bytes.IndexByte(data[open:], ']')
+		if closeText == -1 {
+			out = append(out, data[open:]...)
+			break
+		}
+		closeText += open
+
+		if closeText+1 >= len(data) || data[closeText+1] != '(' {
+			out = append(out, data[open:closeText+1]...)
+			i = closeText + 1
+			continue
+		}
+
+		closeHref := bytes.IndexByte(data[closeText+2:], ')')
+		if closeHref == -1 {
+			out = append(out, data[open:]...)
+			break
+		}
+		closeHref += closeText + 2
+
+		text := string(data[open+1 : closeText])
+		href := string(data[closeText+2 : closeHref])
+
+		if strings.Contains(href, "://") {
+			out = append(out, data[open:closeHref+1]...)
+			i = closeHref + 1
+			continue
+		}
+
+		target, err := filepath.Abs(filepath.Join(dir, href))
+		if err != nil || target != targetAbs {
+			out = append(out, data[open:closeHref+1]...)
+			i = closeHref + 1
+			continue
+		}
+
+		out = append(out, []byte(replace(path, absDir, text, href))...)
+		changed = true
+		i = closeHref + 1
+	}
+
+	if changed {
+		if err := os.WriteFile(path, out, 0644); err != nil {
+			return false, err
+		}
+	}
+	return changed, nil
+}
+
+// updateVaultLinks walks linkScanDirs and applies rewriteMatchingLinks to
+// every .md file except skipAbs, matching links against targetAbs. If
+// onFileChanged is non-nil, it's called once per file that was modified.
+// Returns the number of files changed.
+func updateVaultLinks(targetAbs, skipAbs string, replace func(filePath, fileAbsDir, text, href string) string, onFileChanged func(path string)) int {
+	filesChanged := 0
+	for _, dir := range linkScanDirs {
+		filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() || !strings.HasSuffix(path, ".md") {
+				return nil
+			}
+
+			absPath, err := filepath.Abs(path)
+			if err != nil || absPath == skipAbs {
+				return nil
+			}
+
+			changed, err := rewriteMatchingLinks(path, targetAbs, replace)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "fix links in", path, ":", err)
+				return nil
+			}
+
+			if changed {
+				filesChanged++
+				if onFileChanged != nil {
+					onFileChanged(path)
+				}
+			}
+
+			return nil
+		})
+	}
+	return filesChanged
+}
