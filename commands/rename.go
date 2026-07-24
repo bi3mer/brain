@@ -1,4 +1,4 @@
-package internal
+package commands
 
 import (
 	"fmt"
@@ -8,8 +8,9 @@ import (
 
 type RenameCommand struct{}
 
-func (RenameCommand) Name() string  { return "rename" }
-func (RenameCommand) Usage() string { return "rename <old-path> <new-path> [new-title]" }
+func (RenameCommand) Name() string       { return "rename" }
+func (RenameCommand) Usage() string      { return "rename <old-path> <new-path> [new-title]" }
+func (RenameCommand) RequiresRoot() bool { return true }
 
 func (c RenameCommand) Run(args []string) error {
 	if len(args) != 2 && len(args) != 3 {

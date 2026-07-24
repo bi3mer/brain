@@ -1,36 +1,22 @@
-// brain is the CLI for this vault: creating, renaming, and deleting zettel
-// notes, and assembling a manuscript from a chapter directory's .meta file.
-// The command implementations live in internal/, exported so this file can
-// wire them up; internal/ itself stays unimportable from outside this
-// module (Go's "internal" convention).
-//
-// Usage:
-//
-//	go run ./brain create <type> <title...>
-//	go run ./brain rename <old-path> <new-path> [new-title]
-//	go run ./brain delete <path>
-//	go run ./brain manuscript <chapters-dir>
-//
-// Run from the vault repo root — every path a command takes is relative to
-// the working directory, not to this binary's location.
 package main
 
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
-	"tools/internal"
+	"brain/commands"
 )
 
-// commands holds every registered subcommand, in registration order.
-var commands []internal.Command
+// registry holds every registered subcommand, in registration order.
+var registry []commands.Command
 
-func register(c internal.Command) {
-	commands = append(commands, c)
+func register(c commands.Command) {
+	registry = append(registry, c)
 }
 
-func lookup(name string) internal.Command {
-	for _, c := range commands {
+func lookup(name string) commands.Command {
+	for _, c := range registry {
 		if c.Name() == name {
 			return c
 		}
@@ -39,16 +25,19 @@ func lookup(name string) internal.Command {
 }
 
 func init() {
-	register(internal.RenameCommand{})
-	register(internal.DeleteCommand{})
-	register(internal.CreateCommand{})
-	register(internal.DndCharacterCommand{})
-	register(internal.ManuscriptCommand{})
+	register(commands.InitCommand{})
+	register(commands.RenameCommand{})
+	register(commands.DeleteCommand{})
+	register(commands.CreateCommand{})
+	register(commands.DndCharacterCommand{})
+	register(commands.ManuscriptCommand{})
+	register(commands.IncomingLinksCommand{})
+	register(commands.OutgoingLinksCommand{})
 }
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "usage:")
-	for _, c := range commands {
+	for _, c := range registry {
 		fmt.Fprintln(os.Stderr, "  brain", c.Usage())
 	}
 }
@@ -56,13 +45,29 @@ func usage() {
 func main() {
 	if len(os.Args) < 2 {
 		usage()
-	} else {
-		c := lookup(os.Args[1])
+		return
+	}
 
-		if c == nil {
-			usage()
-		} else if err := c.Run(os.Args[2:]); err != nil {
+	c := lookup(os.Args[1])
+	if c == nil {
+		usage()
+		return
+	}
+
+	if c.RequiresRoot() {
+		root, err := commands.FindRoot()
+		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
+			return
 		}
+
+		if err := os.Chdir(filepath.Dir(root)); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return
+		}
+	}
+
+	if err := c.Run(os.Args[2:]); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 	}
 }

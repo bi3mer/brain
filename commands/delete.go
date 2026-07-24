@@ -1,4 +1,4 @@
-package internal
+package commands
 
 import (
 	"fmt"
@@ -8,8 +8,9 @@ import (
 
 type DeleteCommand struct{}
 
-func (DeleteCommand) Name() string  { return "delete" }
-func (DeleteCommand) Usage() string { return "delete <path>" }
+func (DeleteCommand) Name() string       { return "delete" }
+func (DeleteCommand) Usage() string      { return "delete <path>" }
+func (DeleteCommand) RequiresRoot() bool { return true }
 
 func (c DeleteCommand) Run(args []string) error {
 	if len(args) != 1 {

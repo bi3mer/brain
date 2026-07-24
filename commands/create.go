@@ -1,4 +1,4 @@
-package internal
+package commands
 
 import (
 	"fmt"
@@ -20,8 +20,9 @@ var createNoteTypes = map[string]string{
 
 type CreateCommand struct{}
 
-func (CreateCommand) Name() string  { return "create" }
-func (CreateCommand) Usage() string { return "create <type> <title...>" }
+func (CreateCommand) Name() string       { return "create" }
+func (CreateCommand) Usage() string      { return "create <type> <title...>" }
+func (CreateCommand) RequiresRoot() bool { return true }
 
 const createTypesMsg = "  type: literature | moc | permanent | person | project"
 

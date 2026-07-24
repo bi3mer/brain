@@ -1,4 +1,4 @@
-package internal
+package commands
 
 import (
 	"bytes"
@@ -27,6 +27,33 @@ var smallWords = map[string]bool{
 	"as": true, "at": true, "by": true, "for": true, "in": true,
 	"of": true, "on": true, "per": true, "to": true, "up": true,
 	"via": true, "vs": true, "with": true, "from": true, "into": true,
+}
+
+// FindRoot walks up from the current working directory looking for the
+// RootFile marker (see InitCommand), returning its absolute path. It lets a
+// command locate the vault root no matter which subdirectory it's run from.
+// Errors if no RootFile is found before the filesystem root.
+func FindRoot() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	for {
+		candidate := filepath.Join(dir, RootFile)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		} else if !os.IsNotExist(err) {
+			return "", err
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("%s not found in any parent directory", RootFile)
+		}
+
+		dir = parent
+	}
 }
 
 // titleFromFilename derives a best-effort title from a kebab-case filename.
@@ -126,6 +153,61 @@ func rewriteH1(path string, newTitle string) error {
 	return fmt.Errorf("no H1 heading found in %s", path)
 }
 
+// eachLink parses inline markdown links [text](href) in data and calls
+// visit(text, href) for each internal one, skipping external links (href
+// containing "://"). It's the read-only core shared by the link-reporting
+// commands; it uses the same scan as rewriteMatchingLinks but rewrites
+// nothing.
+func eachLink(data []byte, visit func(text, href string)) {
+	i := 0
+	for i < len(data) {
+		open := bytes.IndexByte(data[i:], '[')
+		if open == -1 {
+			return
+		}
+		open += i
+
+		closeText := bytes.IndexByte(data[open:], ']')
+		if closeText == -1 {
+			return
+		}
+		closeText += open
+
+		if closeText+1 >= len(data) || data[closeText+1] != '(' {
+			i = closeText + 1
+			continue
+		}
+
+		closeHref := bytes.IndexByte(data[closeText+2:], ')')
+		if closeHref == -1 {
+			return
+		}
+		closeHref += closeText + 2
+
+		text := string(data[open+1 : closeText])
+		href := string(data[closeText+2 : closeHref])
+		i = closeHref + 1
+
+		if strings.Contains(href, "://") {
+			continue
+		}
+		visit(text, href)
+	}
+}
+
+// walkVaultFiles calls visit(path) for every .md file under linkScanDirs.
+func walkVaultFiles(visit func(path string)) {
+	for _, dir := range linkScanDirs {
+		filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() || !strings.HasSuffix(path, ".md") {
+				return nil
+			}
+			visit(path)
+			return nil
+		})
+	}
+}
+
 // rewriteMatchingLinks scans path for inline markdown links [text](href)
 // whose href resolves (relative to path's own directory) to targetAbs, and
 // replaces each match with replace(path, path's abs dir, text, href).
@@ -209,32 +291,24 @@ func rewriteMatchingLinks(path, targetAbs string, replace func(filePath, fileAbs
 // Returns the number of files changed.
 func updateVaultLinks(targetAbs, skipAbs string, replace func(filePath, fileAbsDir, text, href string) string, onFileChanged func(path string)) int {
 	filesChanged := 0
-	for _, dir := range linkScanDirs {
-		filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-			if err != nil || info.IsDir() || !strings.HasSuffix(path, ".md") {
-				return nil
-			}
+	walkVaultFiles(func(path string) {
+		absPath, err := filepath.Abs(path)
+		if err != nil || absPath == skipAbs {
+			return
+		}
 
-			absPath, err := filepath.Abs(path)
-			if err != nil || absPath == skipAbs {
-				return nil
-			}
+		changed, err := rewriteMatchingLinks(path, targetAbs, replace)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "fix links in", path, ":", err)
+			return
+		}
 
-			changed, err := rewriteMatchingLinks(path, targetAbs, replace)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, "fix links in", path, ":", err)
-				return nil
+		if changed {
+			filesChanged++
+			if onFileChanged != nil {
+				onFileChanged(path)
 			}
-
-			if changed {
-				filesChanged++
-				if onFileChanged != nil {
-					onFileChanged(path)
-				}
-			}
-
-			return nil
-		})
-	}
+		}
+	})
 	return filesChanged
 }

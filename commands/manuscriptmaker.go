@@ -1,4 +1,4 @@
-package internal
+package commands
 
 import (
 	"bufio"
@@ -10,8 +10,9 @@ import (
 
 type ManuscriptCommand struct{}
 
-func (ManuscriptCommand) Name() string  { return "manuscript" }
-func (ManuscriptCommand) Usage() string { return "manuscript <chapters-dir>" }
+func (ManuscriptCommand) Name() string       { return "manuscript" }
+func (ManuscriptCommand) Usage() string      { return "manuscript <chapters-dir>" }
+func (ManuscriptCommand) RequiresRoot() bool { return false }
 
 // Run reads <chapters-dir>.meta, a newline-separated list of chapter
 // filenames relative to chapters-dir, concatenates each in order, and
