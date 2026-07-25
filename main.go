@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"brain/commands"
+	"github.com/bi3mer/brain/commands"
 )
 
 // registry holds every registered subcommand, in registration order.

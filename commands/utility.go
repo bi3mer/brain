@@ -10,6 +10,8 @@ import (
 
 // linkScanDirs are the directories walked for markdown links that may
 // reference a renamed or deleted note.
+//
+// TODO: just search all directories that don't start with .
 var linkScanDirs = []string{
 	"permanent",
 	"stubs",
