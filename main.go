@@ -26,13 +26,15 @@ func lookup(name string) commands.Command {
 
 func init() {
 	register(commands.InitCommand{})
+	register(commands.Update{})
+	register(commands.Version{})
 	register(commands.RenameCommand{})
 	register(commands.DeleteCommand{})
 	register(commands.CreateCommand{})
-	register(commands.DndCharacterCommand{})
-	register(commands.ManuscriptCommand{})
 	register(commands.IncomingLinksCommand{})
 	register(commands.OutgoingLinksCommand{})
+	register(commands.DndCharacterCommand{})
+	register(commands.ManuscriptCommand{})
 }
 
 func usage() {

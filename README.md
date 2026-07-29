@@ -6,6 +6,37 @@ I started with making markdown files and manually linking them together, but the
 
 To that end, I think I'm going to move towards a `sqlite` solution behind the scenes to make everything easier to manage. Maybe I'll come up with something else later. I don't know.
 
+## Install
+
+Requires [Go](https://go.dev/dl/) 1.26.4 or newer.
+
+```bash
+go install github.com/bi3mer/brain@latest
+```
+
+This drops a `brain` binary in `$GOBIN`, or `$GOPATH/bin` (usually `~/go/bin`) if `GOBIN` isn't set. If that directory isn't on your `PATH`, add it:
+
+```bash
+echo 'export PATH="$PATH:$(go env GOPATH)/bin"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+Use `~/.zshrc` instead if you're on zsh. Then check it worked:
+
+```bash
+brain
+```
+
+You should see the usage listing.
+
+### From source
+
+```bash
+git clone https://github.com/bi3mer/brain.git
+cd brain
+go install .
+```
+
 ## Tests
 
 ```bash

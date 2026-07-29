@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 )
 
@@ -313,4 +314,13 @@ func updateVaultLinks(targetAbs, skipAbs string, replace func(filePath, fileAbsD
 		}
 	})
 	return filesChanged
+}
+
+func buildVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok || info.Main.Version == "" || info.Main.Version == "(devel)" {
+		return "dev"
+	}
+
+	return info.Main.Version
 }
