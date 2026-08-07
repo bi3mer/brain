@@ -14,9 +14,6 @@ func (ManuscriptCommand) Name() string       { return "manuscript" }
 func (ManuscriptCommand) Usage() string      { return "manuscript <chapters-dir>" }
 func (ManuscriptCommand) RequiresRoot() bool { return false }
 
-// Run reads <chapters-dir>.meta, a newline-separated list of chapter
-// filenames relative to chapters-dir, concatenates each in order, and
-// writes the result to manuscript.md.
 func (c ManuscriptCommand) Run(args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: brain %s", c.Usage())

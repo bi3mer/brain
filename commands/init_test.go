@@ -8,15 +8,16 @@ import (
 	"testing"
 )
 
-// vaultDirs is every directory `brain init` creates, in the order it creates
+// brainDirs is every directory `brain init` creates, in the order it creates
 // them. Kept in sync with InitCommand.Run by hand. The order is part of the
 // contract the tests lean on: dirs come before the marker file, and a later
 // dir failing means every earlier one has to be rolled back.
-var vaultDirs = []string{
+var brainDirs = []string{
 	"index",
 	"inbox",
 	"literature",
 	"permanent",
+	"reference",
 	"projects",
 	filepath.Join("projects", "future"),
 	filepath.Join("projects", "active"),
@@ -25,16 +26,17 @@ var vaultDirs = []string{
 	"templates",
 }
 
-// vaultRootEntries is everything a fresh vault has sitting in its root: the
-// dirs from vaultDirs with no parent, plus the marker file. Spelled out
-// instead of filtered out of vaultDirs so a new entry has to be added here
+// brainRootEntries is everything a fresh brain has sitting in its root: the
+// dirs from brainDirs with no parent, plus the marker file. Spelled out
+// instead of filtered out of brainDirs so a new entry has to be added here
 // deliberately — that's the whole point of TestInitCreatesNothingExtra.
-var vaultRootEntries = []string{
+var brainRootEntries = []string{
 	RootFile,
 	"index",
 	"inbox",
 	"literature",
 	"permanent",
+	"reference",
 	"projects",
 	"stubs",
 	"templates",
@@ -90,7 +92,7 @@ func sortedEntryNames(t *testing.T, dir string) []string {
 	return names
 }
 
-func TestInitCreatesVault(t *testing.T) {
+func TestInitCreatesBrain(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	cmd := InitCommand{}
@@ -99,7 +101,7 @@ func TestInitCreatesVault(t *testing.T) {
 		t.Fatalf("init: %v", err)
 	}
 
-	for _, dir := range vaultDirs {
+	for _, dir := range brainDirs {
 		wantDir(t, dir)
 	}
 
@@ -122,27 +124,29 @@ func TestInitCreatesNothingExtra(t *testing.T) {
 		t.Fatalf("init: %v", err)
 	}
 
-	want := slices.Clone(vaultRootEntries)
+	want := slices.Clone(brainRootEntries)
 	slices.Sort(want)
 
 	got := sortedEntryNames(t, ".")
 	if !slices.Equal(got, want) {
-		t.Errorf("vault root is %v, want %v", got, want)
+		t.Errorf("brain root is %v, want %v", got, want)
 	}
 }
 
-func TestInitRejectsArguments(t *testing.T) {
+// TestInitIgnoresArguments pins the deliberate choice that init takes no
+// arguments and does not care if it is handed some: extra args are dropped
+// and the brain is built exactly as it would be with none.
+func TestInitIgnoresArguments(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	cmd := InitCommand{}
 
-	if err := cmd.Run([]string{"extra"}); err == nil {
-		t.Fatal("init with an argument should fail")
+	if err := cmd.Run([]string{"extra"}); err != nil {
+		t.Fatalf("init with an argument: %v", err)
 	}
 
-	// The argument guard runs first, so the directory is still empty.
-	if got := sortedEntryNames(t, "."); len(got) != 0 {
-		t.Errorf("init wrote %v after refusing its arguments", got)
+	for _, dir := range brainDirs {
+		wantDir(t, dir)
 	}
 }
 
@@ -165,9 +169,21 @@ func TestInitRefusesExistingMarker(t *testing.T) {
 		t.Errorf("init failed with %q, want it to mention %q", err, want)
 	}
 
-	// The marker check happens before the first Mkdir, so a vault that was
+	// The absolute path is the useful half of the message: someone who ran
+	// init in the wrong terminal learns which brain they already have.
+	dir, wdErr := os.Getwd()
+	if wdErr != nil {
+		t.Fatalf("getwd: %v", wdErr)
+	}
+
+	wantPath := filepath.Join(dir, RootFile)
+	if !strings.Contains(err.Error(), wantPath) {
+		t.Errorf("init failed with %q, want it to name %q", err, wantPath)
+	}
+
+	// The marker check happens before the first Mkdir, so a brain that was
 	// only half set up keeps whatever layout it already had.
-	for _, dir := range vaultDirs {
+	for _, dir := range brainDirs {
 		wantNoSuchFile(t, dir)
 	}
 }
@@ -177,7 +193,7 @@ func TestInitCleansUpAfterFailure(t *testing.T) {
 
 	// stubs is created late in the loop, so pre-creating it makes that
 	// Mkdir fail EEXIST partway through and sends init down its cleanup
-	// path with most of the vault already on disk.
+	// path with most of the brain already on disk.
 	if err := os.Mkdir("stubs", 0755); err != nil {
 		t.Fatalf("seed stubs: %v", err)
 	}
@@ -190,7 +206,7 @@ func TestInitCleansUpAfterFailure(t *testing.T) {
 
 	// Everything init made before stubs is rolled back, and templates was
 	// never reached. Only the dir the test seeded survives.
-	for _, dir := range vaultDirs {
+	for _, dir := range brainDirs {
 		if dir == "stubs" {
 			continue
 		}
@@ -201,7 +217,7 @@ func TestInitCleansUpAfterFailure(t *testing.T) {
 	wantNoSuchFile(t, RootFile)
 }
 
-func TestInitTwiceLeavesFirstVaultAlone(t *testing.T) {
+func TestInitTwiceLeavesFirstBrainAlone(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	cmd := InitCommand{}
@@ -214,8 +230,8 @@ func TestInitTwiceLeavesFirstVaultAlone(t *testing.T) {
 		t.Fatal("second init should fail")
 	}
 
-	// The failed run must not drag the working vault into its cleanup.
-	for _, dir := range vaultDirs {
+	// The failed run must not drag the working brain into its cleanup.
+	for _, dir := range brainDirs {
 		wantDir(t, dir)
 	}
 

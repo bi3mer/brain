@@ -34,7 +34,7 @@ func (c DeleteCommand) Run(args []string) error {
 	tombstone := "[[" + title + " deleted]]"
 
 	linksRemoved := 0
-	filesChanged := updateVaultLinks(targetAbs, targetAbs, func(filePath, fileAbsDir, text, href string) string {
+	filesChanged := updateBrainLinks(targetAbs, targetAbs, func(filePath, fileAbsDir, text, href string) string {
 		linksRemoved++
 		fmt.Printf("Removed link in %s: [%s](%s)\n", filePath, text, href)
 		return tombstone

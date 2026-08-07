@@ -7,15 +7,18 @@ import (
 	"strings"
 )
 
-// createNoteTypes maps a note type (as passed to `zettle create`) to the
-// directory it's created in. The template for each type lives at
-// templates/<type>.md.
-var createNoteTypes = map[string]string{
-	"literature": "literature",
-	"moc":        "index",
-	"person":     "index",
-	"permanent":  "permanent",
-	"project":    filepath.Join("projects", "future"),
+type noteType struct {
+	dir      string
+	template string
+}
+
+var createNoteTypes = map[string]noteType{
+	"literature": {"literature", "literature.md"},
+	"index":      {"index", "index.md"},
+	"reference":  {"reference", "reference.md"},
+	"permanent":  {"permanent", "permanent.md"},
+	"stub":       {"stubs", "permanent.md"},
+	"project":    {filepath.Join("projects", "future"), "project.md"},
 }
 
 type CreateCommand struct{}
@@ -24,26 +27,26 @@ func (CreateCommand) Name() string       { return "create" }
 func (CreateCommand) Usage() string      { return "create <type> <title...>" }
 func (CreateCommand) RequiresRoot() bool { return true }
 
-const createTypesMsg = "  type: literature | moc | permanent | person | project"
+const createTypesMsg = "  type: literature | index | stub | permanent | reference | project"
 
 func (c CreateCommand) Run(args []string) error {
 	if len(args) < 2 {
 		return fmt.Errorf("usage: brain %s\n%s", c.Usage(), createTypesMsg)
 	}
-	noteType := args[0]
+	typeName := args[0]
 	title := strings.Join(args[1:], " ")
 
-	dir, ok := createNoteTypes[noteType]
+	nt, ok := createNoteTypes[typeName]
 	if !ok {
-		return fmt.Errorf("unknown type: %s\nusage: brain %s\n%s", noteType, c.Usage(), createTypesMsg)
+		return fmt.Errorf("unknown type: %s\nusage: brain %s\n%s", typeName, c.Usage(), createTypesMsg)
 	}
 
-	dest := filepath.Join(dir, filenameFromTitle(title)+".md")
+	dest := filepath.Join(nt.dir, filenameFromTitle(title)+".md")
 	if _, err := os.Stat(dest); err == nil {
 		return fmt.Errorf("file already exists: %s", dest)
 	}
 
-	template := filepath.Join("templates", noteType+".md")
+	template := filepath.Join(TemplateDirectory, nt.template)
 	data, err := os.ReadFile(template)
 	if err != nil {
 		return fmt.Errorf("read template: %w", err)
@@ -53,6 +56,7 @@ func (c CreateCommand) Run(args []string) error {
 	if err := os.WriteFile(dest, []byte(content), 0644); err != nil {
 		return fmt.Errorf("write: %w", err)
 	}
+
 	fmt.Printf("Created: %s\n", dest)
 	return nil
 }

@@ -12,9 +12,6 @@ func (IncomingLinksCommand) Name() string       { return "incoming-links" }
 func (IncomingLinksCommand) Usage() string      { return "incoming-links <path>" }
 func (IncomingLinksCommand) RequiresRoot() bool { return true }
 
-// Run scans the vault and logs every markdown link, in any other note, that
-// resolves to the note at <path>. <path> is vault-root-relative (see
-// FindRoot).
 func (c IncomingLinksCommand) Run(args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: brain %s", c.Usage())
@@ -31,7 +28,7 @@ func (c IncomingLinksCommand) Run(args []string) error {
 	}
 
 	count := 0
-	walkVaultFiles(func(p string) {
+	walkBrainFiles(func(p string) {
 		absP, err := filepath.Abs(p)
 		if err != nil || absP == targetAbs {
 			return

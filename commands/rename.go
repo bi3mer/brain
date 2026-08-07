@@ -55,7 +55,7 @@ func (c RenameCommand) Run(args []string) error {
 		return fmt.Errorf("rewrite title: %w", err)
 	}
 
-	filesChanged := updateVaultLinks(oldAbs, newAbs, func(filePath, fileAbsDir, text, href string) string {
+	filesChanged := updateBrainLinks(oldAbs, newAbs, func(filePath, fileAbsDir, text, href string) string {
 		newHref, err := filepath.Rel(fileAbsDir, newAbs)
 		if err != nil {
 			return "[" + text + "](" + href + ")"

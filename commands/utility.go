@@ -34,7 +34,7 @@ var smallWords = map[string]bool{
 
 // FindRoot walks up from the current working directory looking for the
 // RootFile marker (see InitCommand), returning its absolute path. It lets a
-// command locate the vault root no matter which subdirectory it's run from.
+// command locate the brain root no matter which subdirectory it's run from.
 // Errors if no RootFile is found before the filesystem root.
 func FindRoot() (string, error) {
 	dir, err := os.Getwd()
@@ -57,6 +57,19 @@ func FindRoot() (string, error) {
 
 		dir = parent
 	}
+}
+
+// EnterBrainRoot locates the brain root with FindRoot and chdirs into it.
+// Every command with RequiresRoot() true is dispatched through this, so it
+// can treat brain-relative paths as relative to the cwd no matter which
+// subdirectory the user actually ran brain from.
+func EnterBrainRoot() error {
+	root, err := FindRoot()
+	if err != nil {
+		return err
+	}
+
+	return os.Chdir(filepath.Dir(root))
 }
 
 // titleFromFilename derives a best-effort title from a kebab-case filename.
@@ -198,8 +211,8 @@ func eachLink(data []byte, visit func(text, href string)) {
 	}
 }
 
-// walkVaultFiles calls visit(path) for every .md file under linkScanDirs.
-func walkVaultFiles(visit func(path string)) {
+// walkBrainFiles calls visit(path) for every .md file under linkScanDirs.
+func walkBrainFiles(visit func(path string)) {
 	for _, dir := range linkScanDirs {
 		filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 			if err != nil || info.IsDir() || !strings.HasSuffix(path, ".md") {
@@ -211,10 +224,6 @@ func walkVaultFiles(visit func(path string)) {
 	}
 }
 
-// rewriteMatchingLinks scans path for inline markdown links [text](href)
-// whose href resolves (relative to path's own directory) to targetAbs, and
-// replaces each match with replace(path, path's abs dir, text, href).
-// External links (href containing "://") are never matched.
 func rewriteMatchingLinks(path, targetAbs string, replace func(filePath, fileAbsDir, text, href string) string) (bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -288,13 +297,9 @@ func rewriteMatchingLinks(path, targetAbs string, replace func(filePath, fileAbs
 	return changed, nil
 }
 
-// updateVaultLinks walks linkScanDirs and applies rewriteMatchingLinks to
-// every .md file except skipAbs, matching links against targetAbs. If
-// onFileChanged is non-nil, it's called once per file that was modified.
-// Returns the number of files changed.
-func updateVaultLinks(targetAbs, skipAbs string, replace func(filePath, fileAbsDir, text, href string) string, onFileChanged func(path string)) int {
+func updateBrainLinks(targetAbs, skipAbs string, replace func(filePath, fileAbsDir, text, href string) string, onFileChanged func(path string)) int {
 	filesChanged := 0
-	walkVaultFiles(func(path string) {
+	walkBrainFiles(func(path string) {
 		absPath, err := filepath.Abs(path)
 		if err != nil || absPath == skipAbs {
 			return

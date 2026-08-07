@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/bi3mer/brain/commands"
 )
@@ -57,19 +56,14 @@ func main() {
 	}
 
 	if c.RequiresRoot() {
-		root, err := commands.FindRoot()
-		if err != nil {
+		if err := commands.EnterBrainRoot(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			return
-		}
-
-		if err := os.Chdir(filepath.Dir(root)); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return
+			os.Exit(1)
 		}
 	}
 
 	if err := c.Run(os.Args[2:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 }

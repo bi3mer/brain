@@ -42,3 +42,7 @@ go install .
 ```bash
 go test ./commands/
 ```
+
+## LLM Disclosure
+
+An LLM was used to create any file ending with the prefix of `_test.go`. Otherwise, I have used an LLM to check code and implement things that I don't care about, but have simple solutions, such as `utility.titleFromFilename`. Majority of code here, though, is written by me.
